@@ -19,6 +19,7 @@
 #include "asc_security_core/components_factory_declarations.h"
 #include "asc_security_core/components_manager.h"
 #include "asc_security_core/serializer.h"
+#include "asc_security_core/utils/itime.h"
 #include "asc_security_core/utils/notifier.h"
 #include "asc_security_core/utils/num2str.h"
 
@@ -28,14 +29,14 @@
 static asc_result_t _collector_system_information_serialize_events(collector_internal_t *collector_internal_ptr, serializer_t *serializer);
 static asc_result_t _collect_operation_system_information(collector_internal_t *collector_internal_ptr, system_information_t *data_ptr);
 
-static asc_result_t _init(component_id_t id);
+static asc_result_t _cm_init(component_id_t id);
 
-COLLECTOR_OPS_DEFINITIONS(_init, collector_default_deinit,
+COLLECTOR_OPS_DEFINITIONS(, _cm_init, collector_default_deinit,
     collector_default_subscribe, collector_default_unsubscribe, collector_default_start, collector_default_stop);
 
 COMPONENTS_FACTORY_DEFINITION(SystemInformation, &_ops)
 
-static asc_result_t _init(component_id_t id)
+static asc_result_t _cm_init(component_id_t id)
 {
     return collector_default_create(id, SystemInformation, COLLECTOR_PRIORITY_LOW,
         _collector_system_information_serialize_events, ASC_LOW_PRIORITY_INTERVAL, NULL);
@@ -45,7 +46,7 @@ static asc_result_t _collector_system_information_serialize_events(collector_int
 {
     asc_result_t result = ASC_RESULT_OK;
     system_information_t system_information;
-    time_t current_time;
+    unsigned long current_time;
     
     memset(&system_information, 0, sizeof(system_information_t));
 

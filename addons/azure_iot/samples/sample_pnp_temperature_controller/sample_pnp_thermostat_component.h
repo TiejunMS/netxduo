@@ -16,17 +16,14 @@
 extern   "C" {
 #endif
 
-#include "nx_azure_iot_pnp_client.h"
-#include "nx_azure_iot_json_reader.h"
-#include "nx_azure_iot_json_writer.h"
-#include "nx_api.h"
+#include "nx_azure_iot_hub_client_properties.h"
 
 typedef struct SAMPLE_PNP_THERMOSTAT_COMPONENT_TAG
 {
     /* Name of this component */
     UCHAR *component_name_ptr;
 
-    UINT component_name_length;
+    USHORT component_name_length;
 
     /* Current temperature of this thermostat component */
     double currentTemperature;
@@ -47,25 +44,25 @@ typedef struct SAMPLE_PNP_THERMOSTAT_COMPONENT_TAG
 } SAMPLE_PNP_THERMOSTAT_COMPONENT;
 
 UINT sample_pnp_thermostat_init(SAMPLE_PNP_THERMOSTAT_COMPONENT *handle,
-                                UCHAR *component_name_ptr, UINT component_name_length,
+                                UCHAR *component_name_ptr, USHORT component_name_length,
                                 double default_temp);
 
 UINT sample_pnp_thermostat_process_command(SAMPLE_PNP_THERMOSTAT_COMPONENT *handle,
-                                           const UCHAR *component_name_ptr, UINT component_name_length,
-                                           const UCHAR *pnp_command_name_ptr, UINT pnp_command_name_length,
+                                           const UCHAR *component_name_ptr, USHORT component_name_length,
+                                           const UCHAR *pnp_command_name_ptr, USHORT pnp_command_name_length,
                                            NX_AZURE_IOT_JSON_READER *json_reader_ptr,
                                            NX_AZURE_IOT_JSON_WRITER *json_response_ptr, UINT *status_code);
 
 UINT sample_pnp_thermostat_telemetry_send(SAMPLE_PNP_THERMOSTAT_COMPONENT *handle,
-                                          NX_AZURE_IOT_PNP_CLIENT *iotpnp_client_ptr);
+                                          NX_AZURE_IOT_HUB_CLIENT *iothub_client_ptr);
 
 UINT sample_pnp_thermostat_report_max_temp_since_last_reboot_property(SAMPLE_PNP_THERMOSTAT_COMPONENT *handle,
-                                                                      NX_AZURE_IOT_PNP_CLIENT *iotpnp_client_ptr);
+                                                                      NX_AZURE_IOT_HUB_CLIENT *iothub_client_ptr);
 
 
 UINT sample_pnp_thermostat_process_property_update(SAMPLE_PNP_THERMOSTAT_COMPONENT *handle,
-                                                   NX_AZURE_IOT_PNP_CLIENT *iotpnp_client_ptr,
-                                                   const UCHAR *component_name_ptr, UINT component_name_length,
+                                                   NX_AZURE_IOT_HUB_CLIENT *iothub_client_ptr,
+                                                   const UCHAR *component_name_ptr, USHORT component_name_length,
                                                    NX_AZURE_IOT_JSON_READER *name_value_reader_ptr, UINT version);
 
 #ifdef __cplusplus

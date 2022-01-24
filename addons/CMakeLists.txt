@@ -51,11 +51,10 @@ if(NXD_ENABLE_AZURE_IOT)
     list(APPEND SOURCES
          ${CMAKE_CURRENT_LIST_DIR}/azure_iot/nx_azure_iot.c
          ${CMAKE_CURRENT_LIST_DIR}/azure_iot/nx_azure_iot_hub_client.c
+         ${CMAKE_CURRENT_LIST_DIR}/azure_iot/nx_azure_iot_hub_client_properties.c
          ${CMAKE_CURRENT_LIST_DIR}/azure_iot/nx_azure_iot_json_reader.c
          ${CMAKE_CURRENT_LIST_DIR}/azure_iot/nx_azure_iot_json_writer.c
          ${CMAKE_CURRENT_LIST_DIR}/azure_iot/nx_azure_iot_provisioning_client.c
-         ${CMAKE_CURRENT_LIST_DIR}/azure_iot/nx_azure_iot_pnp_client.c
-         ${CMAKE_CURRENT_LIST_DIR}/azure_iot/nx_azure_iot_hub_transport.c
          ${CMAKE_CURRENT_LIST_DIR}/azure_iot/nx_azure_iot_adu_agent.c
          ${CMAKE_CURRENT_LIST_DIR}/azure_iot/nx_azure_iot_adu_root_key.c
     )

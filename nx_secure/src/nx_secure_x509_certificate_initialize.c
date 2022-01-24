@@ -15,14 +15,13 @@
 /**                                                                       */
 /** NetX Secure Component                                                 */
 /**                                                                       */
-/**    X509 Digital Certificates                                          */
+/**    X.509 Digital Certificates                                         */
 /**                                                                       */
 /**************************************************************************/
 /**************************************************************************/
 
 #define NX_SECURE_SOURCE_CODE
 
-#include "nx_secure_tls.h"
 #include "nx_secure_x509.h"
 
 /**************************************************************************/
@@ -30,7 +29,7 @@
 /*  FUNCTION                                               RELEASE        */
 /*                                                                        */
 /*    _nx_secure_x509_certificate_initialize              PORTABLE C      */
-/*                                                           6.1.5        */
+/*                                                           6.1.7        */
 /*  AUTHOR                                                                */
 /*                                                                        */
 /*    Timothy Stapko, Microsoft Corporation                               */
@@ -100,6 +99,13 @@
 /*  03-02-2021     Timothy Stapko           Modified comment(s),          */
 /*                                            removed unnecessary mutex,  */
 /*                                            resulting in version 6.1.5  */
+/*  04-02-2021     Timothy Stapko           Modified comment(s),          */
+/*                                            removed dependency on TLS,  */
+/*                                            resulting in version 6.1.6  */
+/*  06-02-2021     Timothy Stapko           Modified comment(s),          */
+/*                                            supported hardware EC       */
+/*                                            private key,                */
+/*                                            resulting in version 6.1.7  */
 /*                                                                        */
 /**************************************************************************/
 UINT _nx_secure_x509_certificate_initialize(NX_SECURE_X509_CERT *certificate,
@@ -119,7 +125,7 @@ NX_SECURE_EC_PRIVATE_KEY *ec_key;
 
     /* Set up the certificate with raw data. */
     certificate -> nx_secure_x509_certificate_raw_data_length = length;
-    if (raw_data_buffer == NX_NULL)
+    if (raw_data_buffer == NX_CRYPTO_NULL)
     {
         /* No buffer was passed in so just point to the certificate itself. */
         certificate -> nx_secure_x509_certificate_raw_buffer_size = length;
@@ -130,7 +136,7 @@ NX_SECURE_EC_PRIVATE_KEY *ec_key;
         /* Make sure we have enough space in the buffer for the certificate. */
         if (length > buffer_size)
         {
-            return(NX_SECURE_TLS_INSUFFICIENT_CERT_SPACE);
+            return(NX_SECURE_X509_INSUFFICIENT_CERT_SPACE);
         }
         /* Use the caller-supplied buffer for the certificate. */
         certificate -> nx_secure_x509_certificate_raw_buffer_size = buffer_size;
@@ -148,7 +154,7 @@ NX_SECURE_EC_PRIVATE_KEY *ec_key;
 
     if (status != 0)
     {
-        return(NX_SECURE_TLS_INVALID_CERTIFICATE);
+        return(NX_SECURE_X509_INVALID_CERTIFICATE);
     }
 
     /* If the optional private key is supplied, save it for later use. */
@@ -178,6 +184,12 @@ NX_SECURE_EC_PRIVATE_KEY *ec_key;
                 status = _nx_secure_x509_ec_private_key_parse(private_key, priv_len, &bytes_processed, ec_key);
                 break;
 #endif /* NX_SECURE_ENABLE_ECC_CIPHERSUITE */
+
+            case NX_SECURE_X509_KEY_TYPE_HARDWARE:
+                certificate -> nx_secure_x509_private_key.user_key.key_data = private_key;
+                certificate -> nx_secure_x509_private_key.user_key.key_length = priv_len;
+                status = NX_SUCCESS;
+                break;
             case NX_SECURE_X509_KEY_TYPE_NONE:
             default:
                 /* Unknown or invalid key type, return error. */
@@ -193,16 +205,16 @@ NX_SECURE_EC_PRIVATE_KEY *ec_key;
         }
 
         /* We have a private key, this is a server or client identity certificate. */
-        certificate -> nx_secure_x509_certificate_is_identity_cert = NX_TRUE;
+        certificate -> nx_secure_x509_certificate_is_identity_cert = NX_CRYPTO_TRUE;
     }
     else
     {
         /* No private key? Cannot be an identity certificate. */
-        certificate -> nx_secure_x509_certificate_is_identity_cert = NX_FALSE;
+        certificate -> nx_secure_x509_certificate_is_identity_cert = NX_CRYPTO_FALSE;
     }
 
     certificate -> nx_secure_x509_next_certificate = NULL;
 
-    return(NX_SUCCESS);
+    return(NX_SECURE_X509_SUCCESS);
 }
 

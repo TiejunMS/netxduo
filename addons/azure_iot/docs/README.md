@@ -5,7 +5,7 @@ Azure IoT Middleware for Azure RTOS is a platform specific library that acts as 
 * Expose smart client interfaces (IoTHub_Client, DeviceProvisioning_Client) for the customers, to be consumed in their application.
 * Orchestrate the interaction between Embedded C SDK and platform.
 * Provide Azure RTOS platform initialization.
-* IoT Plug and Play support.
+* [IoT Plug and Play](https://docs.microsoft.com/azure/iot-develop/overview-iot-plug-and-play) support.
 * Security capabilities.
 * Resource limitation aware.
 * Protocol support.
@@ -40,11 +40,14 @@ Manufacturer | Device | Samples |
 | NXP | [MIMXRT1060-EVK](https://www.nxp.com/design/development-boards/i-mx-evaluation-and-development-boards/mimxrt1060-evk-i-mx-rt1060-evaluation-kit:MIMXRT1060-EVK) | [GCC/CMake](https://github.com/azure-rtos/getting-started/tree/master/NXP/MIMXRT1060-EVK) • [IAR](https://aka.ms/azrtos-sample/rt1060-iar) • [MCUXpresso](https://aka.ms/azrtos-sample/rt1060-mcuxpresso)
 | STMicroelectronics | [STM32F746GDISCOVERY](https://www.st.com/en/evaluation-tools/32f746gdiscovery.html) | [IAR](https://aka.ms/azrtos-sample/f746g-iar) • [STM32Cube](https://aka.ms/azrtos-sample/f746g-cubeide)
 | STMicroelectronics | [B-L4S5I-IOT01](https://www.st.com/en/evaluation-tools/b-l4s5i-iot01a.html) / [B-L475E-IOT01](https://www.st.com/en/evaluation-tools/b-l475e-iot01a.html) | [GCC/CMake](https://github.com/azure-rtos/getting-started/tree/master/STMicroelectronics/STM32L4_L4%2B) • [IAR](https://aka.ms/azrtos-sample/l4s5-iar) • [STM32Cube](https://aka.ms/azrtos-sample/l4s5-cubeide)
+| Renesas | [RX65N-RSK-2MB](https://www.renesas.com/us/en/products/microcontrollers-microprocessors/rx-32-bit-performance-efficiency-mcus/rx65n-2mb-starter-kit-plus-renesas-starter-kit-rx65n-2mb) | [GCC/CMake](https://github.com/azure-rtos/getting-started/tree/master/Renesas/RSK_RX65N_2MB) • [IAR](https://aka.ms/azrtos-samples/rx65n-rsk-2mb-iar) • [E2Studio CCRX](https://aka.ms/azrtos-samples/rx65n-rsk-2mb-ccrx) • [E2Studio GNURX](https://aka.ms/azrtos-samples/rx65n-rsk-2mb-gnurx)
+| Renesas | [RX65N-Cloud-Kit](https://www.renesas.com/us/en/products/microcontrollers-microprocessors/rx-32-bit-performance-efficiency-mcus/rx65n-cloud-kit-renesas-rx65n-cloud-kit) | [E2Studio CCRX](https://aka.ms/azrtos-samples/rx65n-ck-ccrx) • [E2Studio GNURX](https://aka.ms/azrtos-samples/rx65n-ck-gnurx)
 
 ## Features
 
 Basic features provided by [Azure SDK for Embedded C](https://github.com/Azure/azure-sdk-for-c/tree/master/sdk/docs/iot):
 * Connect to IoTHub via MQTT.
+* APIs following the IoT Plug and Play convention to implement Telemetry, Commands, Properties and Components defined in a DTDL model.
 * Send device to cloud (D2C) message.
 * Receive cloud to device (C2D) message.
 * Device Twins.
@@ -64,9 +67,9 @@ See the [samples](https://github.com/azure-rtos/samples/tree/PublicPreview/ADU) 
 
 And you can learn more details about the [Device Update for IoT Hub service](https://docs.microsoft.com/azure/iot-hub-device-update/understand-device-update).
 
-## Azure Defender for IoT security module
+## Azure Defender for IoT
 
-The [Azure Defender for IoT security module](https://docs.microsoft.com/azure/defender-for-iot/iot-security-azure-rtos) provides a comprehensive security solution for Azure RTOS devices. The middleware ships with the ASC for IoT Security Module built-in and enabled by default to detect common threats and potential malicious activities.
+The [Azure Defender for IoT](https://docs.microsoft.com/azure/defender-for-iot/iot-security-azure-rtos) provides a comprehensive security solution for Azure RTOS devices. The middleware ships with the ASC for IoT Security Module built-in and enabled by default to detect common threats and potential malicious activities.
 
 ### Opt-out
 
@@ -114,6 +117,7 @@ Learn [here](https://docs.microsoft.com/en-us/azure/defender-for-iot) for more i
 
 * [nx_azure_iot](./azure_rtos_iot.md)    
 * [nx_azure_iot_hub_client](./azure_rtos_iot_hub_client.md)
+* [nx_azure_iot_hub_client_properties](./azure_rtos_iot_hub_client_properties.md)
 * [nx_azure_iot_provisioning_client](./azure_rtos_iot_provisioning_client.md)
 * [nx_azure_iot_json](./azure_rtos_iot_json.md)
 * [nx_azure_iot_adu_agent](./azure_rtos_iot_adu_agent.md)

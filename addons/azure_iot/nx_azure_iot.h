@@ -9,7 +9,7 @@
 /*                                                                        */
 /**************************************************************************/
 
-/* Version: 6.1 ADU Preview 1 */
+/* Version: 6.1 */
 
 /**
  * @file nx_azure_iot.h
@@ -48,6 +48,18 @@ extern   "C" {
 #define NX_AZURE_IOT_LOG_LEVEL    2
 #endif /* NX_AZURE_IOT_LOG_LEVEL */
 
+/* Define maximum trusted certificates count.  */
+#ifndef NX_AZURE_IOT_MAX_NUM_OF_TRUSTED_CERTS
+#define NX_AZURE_IOT_MAX_NUM_OF_TRUSTED_CERTS 3
+#endif /* NX_AZURE_IOT_MAX_NUM_OF_TRUSTED_CERTS */
+
+/* Define maximum device certificates count.  */
+#ifndef NX_AZURE_IOT_MAX_NUM_OF_DEVICE_CERTS
+#define NX_AZURE_IOT_MAX_NUM_OF_DEVICE_CERTS 2
+#endif /* NX_AZURE_IOT_MAX_NUM_OF_DEVICE_CERTS */
+
+#define NX_AZURE_IOT_ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
+
 /* Define the az iot log function. */
 #define LogError(...)
 #define LogInfo(...)
@@ -65,15 +77,15 @@ UINT nx_azure_iot_log(UCHAR *type_ptr, UINT type_len, UCHAR *msg_ptr, UINT msg_l
 
 #if NX_AZURE_IOT_LOG_LEVEL > 0
 #undef LogError
-#define LogError(...) nx_azure_iot_log(LogLiteralArgs("[ERROR] "), ##__VA_ARGS__)
+#define LogError(...) nx_azure_iot_log(LogLiteralArgs("[ERROR] "), __VA_ARGS__)
 #endif /* NX_AZURE_IOT_LOG_LEVEL > 0 */
 #if NX_AZURE_IOT_LOG_LEVEL > 1
 #undef LogInfo
-#define LogInfo(...) nx_azure_iot_log(LogLiteralArgs("[INFO] "), ##__VA_ARGS__)
+#define LogInfo(...) nx_azure_iot_log(LogLiteralArgs("[INFO] "), __VA_ARGS__)
 #endif /* NX_AZURE_IOT_LOG_LEVEL > 1 */
 #if NX_AZURE_IOT_LOG_LEVEL > 2
 #undef LogDebug
-#define LogDebug(...) nx_azure_iot_log(LogLiteralArgs("[DEBUG] "), ##__VA_ARGS__)
+#define LogDebug(...) nx_azure_iot_log(LogLiteralArgs("[DEBUG] "), __VA_ARGS__)
 #endif /* NX_AZURE_IOT_LOG_LEVEL > 2 */
 
 #define NX_AZURE_IOT_MQTT_QOS_0                           0
@@ -130,11 +142,11 @@ UINT nx_azure_iot_log(UCHAR *type_ptr, UINT type_len, UCHAR *msg_ptr, UINT msg_l
 
 #define NX_AZURE_IOT_EMPTY_JSON                           0x20016
 #define NX_AZURE_IOT_SAS_TOKEN_EXPIRED                    0x20017
+#define NX_AZURE_IOT_NO_MORE_ENTRIES                      0x20018
 
 /* Resource type managed by AZ_IOT.  */
 #define NX_AZURE_IOT_RESOURCE_IOT_HUB                     0x1
 #define NX_AZURE_IOT_RESOURCE_IOT_PROVISIONING            0x2
-#define NX_AZURE_IOT_RESOURCE_IOT_PNP                     0x3
 
 /* Define the packet buffer for THREADX TLS.  */
 #ifndef NX_AZURE_IOT_TLS_PACKET_BUFFER_SIZE
@@ -149,6 +161,9 @@ UINT nx_azure_iot_log(UCHAR *type_ptr, UINT type_len, UCHAR *msg_ptr, UINT msg_l
 
 /* MQTT Subscribe topic offset.  */
 #define NX_AZURE_IOT_MQTT_SUBSCRIBE_TOPIC_OFFSET          6
+
+/* MQTT Publish offset.  */
+#define NX_AZURE_IOT_PUBLISH_PACKET_START_OFFSET          7
 
 /**
  * @brief Resource struct
@@ -174,8 +189,8 @@ typedef struct NX_AZURE_IOT_RESOURCE_STRUCT
     UINT                                   resource_cipher_map_size;
     UCHAR                                 *resource_metadata_ptr;
     UINT                                   resource_metadata_size;
-    NX_SECURE_X509_CERT                   *resource_trusted_certificate;
-    NX_SECURE_X509_CERT                   *resource_device_certificate;
+    NX_SECURE_X509_CERT                   *resource_trusted_certificates[NX_AZURE_IOT_MAX_NUM_OF_TRUSTED_CERTS];
+    NX_SECURE_X509_CERT                   *resource_device_certificates[NX_AZURE_IOT_MAX_NUM_OF_DEVICE_CERTS];
     const UCHAR                           *resource_hostname;
     UINT                                   resource_hostname_length;
     struct NX_AZURE_IOT_RESOURCE_STRUCT   *resource_next;
@@ -310,11 +325,6 @@ UINT nx_azure_iot_base64_hmac_sha256_calculate(NX_AZURE_IOT_RESOURCE *resource_p
                                                const UCHAR *message_ptr, UINT message_size,
                                                UCHAR *buffer_ptr, UINT buffer_len,
                                                UCHAR **output_ptr, UINT *output_len_ptr);
-UINT nx_azure_iot_topic_property_append(NX_PACKET *packet_ptr,
-                                        const UCHAR *property_name, USHORT property_name_length,
-                                        const UCHAR *property_value, USHORT property_value_length,
-                                        UINT wait_option);
-UINT nx_azure_iot_base64_decode(CHAR *base64name, UINT length, UCHAR *name, UINT name_size, UINT *bytes_copied);
 
 #ifdef __cplusplus
 }

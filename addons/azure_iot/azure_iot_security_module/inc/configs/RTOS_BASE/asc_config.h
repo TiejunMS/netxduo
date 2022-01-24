@@ -21,27 +21,35 @@ extern "C" {
 /********************
 * Core configuration
 *********************/
+/* Based on 2021.09.28-3.5.1 core tag */
 
 /* ID and version */
 #define ASC_SECURITY_MODULE_ID "defender-iot-micro-agent"
 #define SECURITY_MODULE_VERSION_MAJOR 3
-#define SECURITY_MODULE_VERSION_MINOR 2
-#define SECURITY_MODULE_VERSION_PATCH 1
+#define SECURITY_MODULE_VERSION_MINOR 5
+#define SECURITY_MODULE_VERSION_PATCH 2
 #ifndef SECURITY_MODULE_VERSION_MAJOR
-#define SECURITY_MODULE_VERSION_MAJOR 3
+#define SECURITY_MODULE_VERSION_MAJOR 0
 #endif
 #ifndef SECURITY_MODULE_VERSION_MINOR
-#define SECURITY_MODULE_VERSION_MINOR 2
+#define SECURITY_MODULE_VERSION_MINOR 0
 #endif
 #ifndef SECURITY_MODULE_VERSION_PATCH
 #define SECURITY_MODULE_VERSION_PATCH 0
 #endif
 
 /* Collectors definitions */
+/* #undef ASC_DYNAMIC_COLLECTORS_MAX */
+#ifndef ASC_DYNAMIC_COLLECTORS_MAX
+#define ASC_DYNAMIC_COLLECTORS_MAX 0
+#endif
 #define ASC_COLLECTOR_HEARTBEAT_ENABLED
 
 /* #undef ASC_COLLECTOR_BASELINE_ENABLED */
 /* #undef ASC_BASELINE_REPORT_POOL_ENTRIES */
+
+/* #undef ASC_COLLECTOR_LOG_ENABLED */
+/* #undef ASC_LOG_REPORT_POOL_ENTRIES */
 
 #define ASC_COLLECTOR_NETWORK_ACTIVITY_ENABLED
 /* #undef ASC_COLLECTOR_NETWORK_ACTIVITY_SEND_EMPTY_EVENTS */
@@ -56,7 +64,6 @@ extern "C" {
 
 /* #undef ASC_COLLECTOR_PROCESS_ENABLED */
 /* #undef ASC_COLLECTOR_PROCESS_SEND_EMPTY_EVENTS */
-/* #undef ASC_COLLECTOR_PROCESS_MODE_AGGREGATED_DISABLE */
 /* #undef ASC_COLLECTOR_PROCESS_IN_CACHE */
 #ifndef ASC_COLLECTOR_PROCESS_IN_CACHE
 #define ASC_COLLECTOR_PROCESS_IN_CACHE 0
@@ -67,6 +74,14 @@ extern "C" {
 /* #undef ASC_COLLECTOR_LISTENING_PORTS_ENABLED */
 
 /* Components definitions */
+/* #undef ASC_DYNAMIC_FACTORY_ENABLED */
+/* #undef ASC_DYNAMIC_FACTORY_PATH */
+/* #undef ASC_DYNAMIC_FACTORY_PATH_RUNTIME_SET */
+/* #undef ASC_DYNAMIC_COMPONENTS_MAX */
+#ifndef ASC_DYNAMIC_COMPONENTS_MAX
+#define ASC_DYNAMIC_COMPONENTS_MAX 0
+#endif
+
 /* #undef ASC_COMPONENT_COMMAND_EXECUTOR */
 /* #undef ASC_OPERATIONS_POOL_ENTRIES */
 
@@ -87,37 +102,63 @@ extern "C" {
 /* ROM reduce */
 /* #undef ASC_COMPONENT_CORE_SUPPORTS_RESTART */
 /* #undef ASC_COLLECTORS_INFO_SUPPORT */
+/* #undef ASC_LINKED_LIST_NODE_SUPPORT */
+
+/* Log */
+// Highest compiled log level
+/* #undef ASC_LOG_LEVEL */
+/* #undef ASC_TIME_H_SUPPORT */
+/* #undef ASC_LOG_TIMESTAMP_DEFAULT */
 
 /* Notifier definitions */
 #define ASC_NOTIFIERS_OBJECT_POOL_ENTRIES 2
 
 /* Event loop best effort */
 #define ASC_BEST_EFFORT_EVENT_LOOP
+#define ASC_BE_TIMERS_OBJECT_POOL_ENTRIES 2
 
 /* Flat buffer serializer */
 #define ASC_SERIALIZER_USE_CUSTOM_ALLOCATOR
 /* #undef ASC_FLATCC_JSON_PRINTER_OVERWRITE */
 #define ASC_EMITTER_PAGE_CACHE_SIZE 1
-#define FLATCC_NO_ASSERT
+/* #undef FLATCC_NO_ASSERT */
+/* FLATCC_ASSERT might be redefined in platform area */
+#define FLATCC_ASSERT NX_ASSERT
 #define FLATCC_USE_GENERIC_ALIGNED_ALLOC
 /* #undef FLATCC_EMITTER_PAGE_SIZE */
 
 /* Tests definitions */
-// Highest compiled log level
-/* #undef ASC_LOG_LEVEL */
 // Set ASC_FIRST_FORCE_COLLECTION_INTERVAL to '-1' to force immediatly collecting
 /* #undef ASC_FIRST_FORCE_COLLECTION_INTERVAL */
 /* #undef ASC_EXTRA_BE_TIMERS_OBJECT_POOL_ENTRIES */
 /* #undef ASC_EXTRA_NOTIFIERS_OBJECT_POOL_ENTRIES */
 /* #undef ASC_EXTRA_COMPONENTS_COUNT */
+#ifndef ASC_EXTRA_COMPONENTS_COUNT
+#define ASC_EXTRA_COMPONENTS_COUNT 0
+#endif
 /* #undef ASC_EXTRA_COLLECTORS_COUNT */
+#ifndef ASC_EXTRA_COLLECTORS_COUNT
+#define ASC_EXTRA_COLLECTORS_COUNT 0
+#endif
+
+#define LOOP_ASSERT_FAIL for (;;) { }
+#define LOOP_ASSERT(s) if (!(s)) {LOOP_ASSERT_FAIL}
 
 /************************
 * Platform configuration
 *************************/
+#ifdef FLATCC_ASSERT
+#undef FLATCC_ASSERT
+#endif
+
 #ifndef __ASC_CONFIG_EXCLUDE_PORT__H__
 #include "tx_port.h"
 #include "nx_port.h"
+#include "nx_api.h"
+
+/* Flat buffer serializer platform */
+#define FLATCC_ASSERT NX_ASSERT
+
 #endif /* __ASC_CONFIG_EXCLUDE_PORT__H__ */
 
 /* Security Module pending time, in seconds */

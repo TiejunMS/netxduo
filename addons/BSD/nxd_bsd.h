@@ -25,7 +25,7 @@
 /*  BSD DEFINITIONS                                        RELEASE        */ 
 /*                                                                        */ 
 /*    nxd_bsd.h                                           PORTABLE C      */ 
-/*                                                           6.1.5        */
+/*                                                           6.1.9        */
 /*  AUTHOR                                                                */
 /*                                                                        */
 /*    Yuxin Zhou, Microsoft Corporation                                   */
@@ -46,6 +46,10 @@
 /*  03-02-2021     Yuxin Zhou               Modified comment(s), and      */
 /*                                            fixed compiler warnings,    */
 /*                                            resulting in version 6.1.5  */
+/*  10-15-2021     Yuxin Zhou               Modified comment(s), and      */
+/*                                            defined IP protocols for    */
+/*                                            ICMP, IGMP and ICMPv6,      */
+/*                                            resulting in version 6.1.9  */
 /*                                                                        */
 /**************************************************************************/
 
@@ -62,7 +66,9 @@ extern   "C" {
 
 #endif
 
+#ifndef __CCRX__
 #include "time.h"
+#endif /* __CCRX__ */
 
 /* Bring in the necessary NetX include file.  */
 #include "nx_api.h"
@@ -191,8 +197,11 @@ extern   "C" {
 #define SOCK_STREAM                         1                       /* TCP Socket                                                          */
 #define SOCK_DGRAM                          2                       /* UDP Socket                                                          */
 #define SOCK_RAW                            3                       /* Raw socket                                                          */
+#define IPPROTO_ICMP                        1                       /* ICMP used with socket type SOCK_RAW                                 */
+#define IPPROTO_IGMP                        2                       /* IGMP used with socket type SOCK_RAW                                 */
 #define IPPROTO_TCP                         6                       /* TCP Socket                                                          */
 #define IPPROTO_UDP                         17                      /* TCP Socket                                                          */
+#define IPPROTO_ICMPV6                      58                      /* ICMPv6 used with socket type SOCK_RAW                               */
 #define IPPROTO_RAW                         255                     /* Raw Socket                                                          */
 
 /* Define supported flags for 'send' and 'recv'. */
@@ -499,7 +508,10 @@ extern   "C" {
 
 /* Define data types used in structure timeval.  */
 
-typedef LONG        suseconds_t;  
+#ifdef __CCRX__
+typedef LONG        time_t;
+#endif /* __CCRX__ */
+typedef LONG        suseconds_t;
 
 #ifndef __SES_ARM
 struct timeval

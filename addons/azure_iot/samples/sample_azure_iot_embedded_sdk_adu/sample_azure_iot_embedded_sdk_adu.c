@@ -13,25 +13,13 @@
 
 #include "nx_api.h"
 #include "nx_azure_iot_adu_agent.h"
+#include "nx_azure_iot_provisioning_client.h"
 
 /* These are sample files, user can build their own certificate and ciphersuites.  */
 #include "nx_azure_iot_cert.h"
 #include "nx_azure_iot_ciphersuites.h"
 #include "sample_config.h"
 
-/* Define Azure RTOS TLS info.  */
-static NX_SECURE_X509_CERT root_ca_cert;
-static UCHAR nx_azure_iot_tls_metadata_buffer[NX_AZURE_IOT_TLS_METADATA_BUFFER_SIZE];
-static ULONG nx_azure_iot_thread_stack[NX_AZURE_IOT_STACK_SIZE / sizeof(ULONG)];
-
-/* Define the prototypes for AZ IoT.  */
-static NX_AZURE_IOT             nx_azure_iot;
-static NX_AZURE_IOT_PNP_CLIENT  pnp_client;
-static NX_AZURE_IOT_ADU_AGENT   adu_agent;
-static TX_EVENT_FLAGS_GROUP     sample_events;
-
-/* ADU model id.  */
-#define SAMPLE_ADU_MODEL_ID                                             "dtmi:AzureDeviceUpdate;1"
 
 /* Device properties.  */
 #define SAMPLE_DEVICE_MANUFACTURER                                      "Contoso"
@@ -42,62 +30,279 @@ static TX_EVENT_FLAGS_GROUP     sample_events;
 #define SAMPLE_UPDATE_ID_NAME                                           "IoTDevice"
 #define SAMPLE_UPDATE_ID_VERSION                                        "6.1.0"
 
-/* Sample events.  */
+#if (NX_AZURE_IOT_ADU_AGENT_PROXY_UPDATE_COUNT >= 1)
+/* Current update id for leaf device.  */
+#define SAMPLE_LEAF_DEVICE_PROVIDER                                     "Contoso"
+#define SAMPLE_LEAF_DEVICE_NAME                                         "IoTDevice-Leaf"
+#endif /* NX_AZURE_IOT_ADU_AGENT_PROXY_UPDATE_COUNT */
+
+/* Define sample wait option.  */
+#ifndef SAMPLE_WAIT_OPTION
+#define SAMPLE_WAIT_OPTION                                              (NX_NO_WAIT)
+#endif /* SAMPLE_WAIT_OPTION */
+
+/* Define sample events.  */
 #define SAMPLE_ALL_EVENTS                                               ((ULONG)0xFFFFFFFF)
-#define SAMPLE_DEVICE_PROPERTIES_GET_EVENT                              ((ULONG)0x00000001)
-#define SAMPLE_DEVICE_DESIRED_PROPERTIES_EVENT                          ((ULONG)0x00000002)
+#define SAMPLE_CONNECTED_EVENT                                          ((ULONG)0x00000001)
+#define SAMPLE_DISCONNECT_EVENT                                         ((ULONG)0x00000002)
+#define SAMPLE_PERIODIC_EVENT                                           ((ULONG)0x00000004)
+#define SAMPLE_TELEMETRY_SEND_EVENT                                     ((ULONG)0x00000008)
+#define SAMPLE_COMMAND_RECEIVE_EVENT                                    ((ULONG)0x00000010)
+#define SAMPLE_PROPERTIES_RECEIVE_EVENT                                 ((ULONG)0x00000020)
+#define SAMPLE_WRITABLE_PROPERTIES_RECEIVE_EVENT                        ((ULONG)0x00000040)
+#define SAMPLE_REPORTED_PROPERTIES_SEND_EVENT                           ((ULONG)0x00000080)
+
+#define SAMPLE_DEAFULT_START_TEMP_CELSIUS                               (22)
+#define DOUBLE_DECIMAL_PLACE_DIGITS                                     (2)
+
+#define SAMPLE_PNP_MODEL_ID                                             "dtmi:azure:iot:deviceUpdateModel;1"
+#define SAMPLE_PNP_DPS_PAYLOAD                                          "{\"modelId\":\"" SAMPLE_PNP_MODEL_ID "\"}"
+
+
+/* Generally, IoTHub Client and DPS Client do not run at the same time, user can use union as below to
+   share the memory between IoTHub Client and DPS Client.
+
+   NOTE: If user can not make sure sharing memory is safe, IoTHub Client and DPS Client must be defined seperately.  */
+typedef union SAMPLE_CLIENT_UNION
+{
+    NX_AZURE_IOT_HUB_CLIENT                         iothub_client;
+
+#ifdef ENABLE_DPS_SAMPLE
+    NX_AZURE_IOT_PROVISIONING_CLIENT                prov_client;
+#endif /* ENABLE_DPS_SAMPLE */
+
+} SAMPLE_CLIENT;
+
+static SAMPLE_CLIENT                                client;
+
+#define iothub_client client.iothub_client
+#ifdef ENABLE_DPS_SAMPLE
+#define prov_client client.prov_client
+#endif /* ENABLE_DPS_SAMPLE */
+
+void sample_entry(NX_IP *ip_ptr, NX_PACKET_POOL *pool_ptr, NX_DNS *dns_ptr, UINT (*unix_time_callback)(ULONG *unix_time));
+
+#ifdef ENABLE_DPS_SAMPLE
+static UINT sample_dps_entry(NX_AZURE_IOT_PROVISIONING_CLIENT *prov_client_ptr,
+                             UCHAR **iothub_hostname, UINT *iothub_hostname_length,
+                             UCHAR **iothub_device_id, UINT *iothub_device_id_length);
+#endif /* ENABLE_DPS_SAMPLE */
+
+/* Define Azure RTOS TLS info.  */
+static NX_SECURE_X509_CERT root_ca_cert;
+static NX_SECURE_X509_CERT root_ca_cert_2;
+static NX_SECURE_X509_CERT root_ca_cert_3;
+static UCHAR nx_azure_iot_tls_metadata_buffer[NX_AZURE_IOT_TLS_METADATA_BUFFER_SIZE];
+static ULONG nx_azure_iot_thread_stack[NX_AZURE_IOT_STACK_SIZE / sizeof(ULONG)];
+
+/* Using X509 certificate authenticate to connect to IoT Hub,
+   set the device certificate as your device.  */
+#if (USE_DEVICE_CERTIFICATE == 1)
+extern const UCHAR sample_device_cert_ptr[];
+extern const UINT sample_device_cert_len;
+extern const UCHAR sample_device_private_key_ptr[];
+extern const UINT sample_device_private_key_len;
+NX_SECURE_X509_CERT device_certificate;
+#endif /* USE_DEVICE_CERTIFICATE */
+
+/* Define buffer for IoTHub info.  */
+#ifdef ENABLE_DPS_SAMPLE
+static UCHAR sample_iothub_hostname[SAMPLE_MAX_BUFFER];
+static UCHAR sample_iothub_device_id[SAMPLE_MAX_BUFFER];
+#endif /* ENABLE_DPS_SAMPLE */
+
+/* Define the prototypes for AZ IoT.  */
+static NX_AZURE_IOT nx_azure_iot;
+
+static TX_EVENT_FLAGS_GROUP sample_events;
+static TX_TIMER sample_timer;
+static volatile UINT sample_connection_status = NX_AZURE_IOT_NOT_INITIALIZED;
+static volatile ULONG sample_periodic_counter = 0;
+
+/* Telemetry.  */
+static const CHAR telemetry_name[] = "Message ID: ";
+static UCHAR scratch_buffer[256];
+static UINT sample_telemetry_id = 0;
+
+static NX_AZURE_IOT_ADU_AGENT adu_agent;
+static UINT adu_agent_started = NX_FALSE;
 
 extern void nx_azure_iot_adu_agent_simulator_driver(NX_AZURE_IOT_ADU_AGENT_DRIVER *driver_req_ptr);
+extern void nx_azure_iot_adu_agent_proxy_simulator_driver(NX_AZURE_IOT_ADU_AGENT_DRIVER *driver_req_ptr);
 
-VOID sample_entry(NX_IP *ip_ptr, NX_PACKET_POOL *pool_ptr, NX_DNS *dns_ptr, UINT (*unix_time_callback)(ULONG *unix_time));
+/* Include the connection monitor function from sample_azure_iot_embedded_sdk_connect.c.  */
+extern VOID sample_connection_monitor(NX_IP *ip_ptr, NX_AZURE_IOT_HUB_CLIENT *iothub_client_ptr, UINT connection_status,
+                                      UINT (*iothub_init)(NX_AZURE_IOT_HUB_CLIENT *hub_client_ptr));
 
-static VOID connection_status_callback(NX_AZURE_IOT_PNP_CLIENT *pnp_client_ptr, UINT status)
+static void adu_agent_update_notify(NX_AZURE_IOT_ADU_AGENT *adu_agent_ptr,
+                                    UCHAR *provider, UINT provider_length,
+                                    UCHAR *name, UINT name_length,
+                                    UCHAR *version, UINT version_length)
 {
-    NX_PARAMETER_NOT_USED(pnp_client_ptr);
+
+    /* Receive new update.  */
+    printf("Receive new update: Provider: %.*s; Name: %.*s, Version: %.*s\r\n",
+           provider_length, provider, name_length, name, version_length, version);
+
+    /* Start to update immediately for testing.  */
+    nx_azure_iot_adu_agent_update_start(adu_agent_ptr);
+}
+
+static void sample_writable_properties_receive_action(NX_AZURE_IOT_HUB_CLIENT *hub_client_ptr)
+{
+UINT status = 0;
+NX_PACKET *packet_ptr;
+
+    /* Receive writable properties.  */
+    if ((status = nx_azure_iot_hub_client_writable_properties_receive(hub_client_ptr,
+                                                                      &packet_ptr,
+                                                                      NX_NO_WAIT)))
+    {
+        printf("Receive writable property receive failed!: error code = 0x%08x\r\n", status);
+        return;
+    }
+
+    /* Call nx_azure_iot_hub_client_properties_component_property_next_get to process properties.  */
+
+    nx_packet_release(packet_ptr);
+}
+
+static void sample_properties_receive_action(NX_AZURE_IOT_HUB_CLIENT *hub_client_ptr)
+{
+UINT status = 0;
+NX_PACKET *packet_ptr;
+
+    /* Receive full properties.  */
+    if ((status = nx_azure_iot_hub_client_properties_receive(hub_client_ptr,
+                                                             &packet_ptr,
+                                                             NX_NO_WAIT)))
+    {
+        printf("Get all properties receive failed!: error code = 0x%08x\r\n", status);
+        return;
+    }
+
+    /* Call nx_azure_iot_hub_client_properties_component_property_next_get to process properties.  */
+
+    nx_packet_release(packet_ptr);
+}
+
+/* Send telemetry message.  */
+static void sample_telemetry_action(NX_AZURE_IOT_HUB_CLIENT *hub_client_ptr)
+{
+UINT status = 0;
+NX_PACKET *packet_ptr;
+NX_AZURE_IOT_JSON_WRITER json_writer;
+UINT buffer_length;
+
+    /* Create a telemetry message packet.  */
+    if ((status = nx_azure_iot_hub_client_telemetry_message_create(hub_client_ptr,
+                                                                   &packet_ptr,
+                                                                   NX_WAIT_FOREVER)))
+    {
+        printf("Telemetry message create failed!: error code = 0x%08x\r\n", status);
+        return;
+    }
+
+    /* Build telemetry JSON payload.  */
+    if(nx_azure_iot_json_writer_with_buffer_init(&json_writer, scratch_buffer, sizeof(scratch_buffer)))
+    {
+        printf("Telemetry message failed to build message\r\n");
+        nx_azure_iot_hub_client_telemetry_message_delete(packet_ptr);
+        return;
+    }
+
+    if (nx_azure_iot_json_writer_append_begin_object(&json_writer) ||
+        nx_azure_iot_json_writer_append_property_with_int32_value(&json_writer,
+                                                                   (UCHAR *)telemetry_name,
+                                                                   sizeof(telemetry_name) - 1,
+                                                                   (int32_t)sample_telemetry_id++) ||
+         nx_azure_iot_json_writer_append_end_object(&json_writer))
+    {
+        printf("Telemetry message failed to build message\r\n");
+        nx_azure_iot_hub_client_telemetry_message_delete(packet_ptr);
+        return;
+    }
+
+    buffer_length = nx_azure_iot_json_writer_get_bytes_used(&json_writer);
+    if ((status = nx_azure_iot_hub_client_telemetry_send(hub_client_ptr, packet_ptr,
+                                                         (UCHAR *)scratch_buffer, buffer_length,
+                                                         SAMPLE_WAIT_OPTION)))
+    {
+        printf("Telemetry message send failed!: error code = 0x%08x\r\n", status);
+        nx_azure_iot_hub_client_telemetry_message_delete(packet_ptr);
+        return;
+    }
+
+    printf("Telemetry message send: %.*s.\r\n", buffer_length, scratch_buffer);
+}
+
+static VOID connection_status_callback(NX_AZURE_IOT_HUB_CLIENT *hub_client_ptr, UINT status)
+{
+    NX_PARAMETER_NOT_USED(hub_client_ptr);
     if (status)
     {
         printf("Disconnected from IoTHub!: error code = 0x%08x\r\n", status);
+        tx_event_flags_set(&sample_events, SAMPLE_DISCONNECT_EVENT, TX_OR);
     }
     else
     {
         printf("Connected to IoTHub.\r\n");
+        tx_event_flags_set(&sample_events, SAMPLE_CONNECTED_EVENT, TX_OR);
     }
+
+    sample_connection_status = status;
 }
 
-static VOID message_receive_callback_properties(NX_AZURE_IOT_PNP_CLIENT *hub_client_ptr, VOID *context)
+static VOID message_receive_callback_writable_properties(NX_AZURE_IOT_HUB_CLIENT *hub_client_ptr, VOID *context)
 {
 
     NX_PARAMETER_NOT_USED(hub_client_ptr);
     NX_PARAMETER_NOT_USED(context);
-    tx_event_flags_set(&sample_events, SAMPLE_DEVICE_PROPERTIES_GET_EVENT, TX_OR);
+    tx_event_flags_set(&(sample_events), SAMPLE_WRITABLE_PROPERTIES_RECEIVE_EVENT, TX_OR);
 }
 
-static VOID message_receive_callback_desire_property(NX_AZURE_IOT_PNP_CLIENT *hub_client_ptr, VOID *context)
+static VOID message_receive_callback_properties(NX_AZURE_IOT_HUB_CLIENT *hub_client_ptr, VOID *context)
 {
 
     NX_PARAMETER_NOT_USED(hub_client_ptr);
     NX_PARAMETER_NOT_USED(context);
-    tx_event_flags_set(&sample_events, SAMPLE_DEVICE_DESIRED_PROPERTIES_EVENT, TX_OR);
+    tx_event_flags_set(&(sample_events), SAMPLE_PROPERTIES_RECEIVE_EVENT, TX_OR);
 }
 
-static UINT sample_initialize_iothub(NX_AZURE_IOT_PNP_CLIENT *pnp_client_ptr)
+static UINT sample_initialize_iothub(NX_AZURE_IOT_HUB_CLIENT *iothub_client_ptr)
 {
 UINT status;
+#ifdef ENABLE_DPS_SAMPLE
+UCHAR *iothub_hostname = NX_NULL;
+UCHAR *iothub_device_id = NX_NULL;
+UINT iothub_hostname_length = 0;
+UINT iothub_device_id_length = 0;
+#else
 UCHAR *iothub_hostname = (UCHAR *)HOST_NAME;
 UCHAR *iothub_device_id = (UCHAR *)DEVICE_ID;
 UINT iothub_hostname_length = sizeof(HOST_NAME) - 1;
 UINT iothub_device_id_length = sizeof(DEVICE_ID) - 1;
+#endif /* ENABLE_DPS_SAMPLE */
 
+#ifdef ENABLE_DPS_SAMPLE
+
+    /* Run DPS.  */
+    if ((status = sample_dps_entry(&prov_client, &iothub_hostname, &iothub_hostname_length,
+                                   &iothub_device_id, &iothub_device_id_length)))
+    {
+        printf("Failed on sample_dps_entry!: error code = 0x%08x\r\n", status);
+        return(status);
+    }
+#endif /* ENABLE_DPS_SAMPLE */
 
     printf("IoTHub Host Name: %.*s; Device ID: %.*s.\r\n",
            iothub_hostname_length, iothub_hostname, iothub_device_id_length, iothub_device_id);
-    
-    /* Initialize PnP client.  */
-    if ((status = nx_azure_iot_pnp_client_initialize(pnp_client_ptr, &nx_azure_iot,
+
+    /* Initialize IoTHub client.  */
+    if ((status = nx_azure_iot_hub_client_initialize(iothub_client_ptr, &nx_azure_iot,
                                                      iothub_hostname, iothub_hostname_length,
                                                      iothub_device_id, iothub_device_id_length,
-                                                     (UCHAR *)MODULE_ID, sizeof(MODULE_ID) - 1,
-                                                     (const UCHAR *)SAMPLE_ADU_MODEL_ID, sizeof(SAMPLE_ADU_MODEL_ID) - 1,
+                                                     (const UCHAR *)MODULE_ID, sizeof(MODULE_ID) - 1,
                                                      _nx_azure_iot_tls_supported_crypto,
                                                      _nx_azure_iot_tls_supported_crypto_size,
                                                      _nx_azure_iot_tls_ciphersuite_map,
@@ -106,107 +311,260 @@ UINT iothub_device_id_length = sizeof(DEVICE_ID) - 1;
                                                      sizeof(nx_azure_iot_tls_metadata_buffer),
                                                      &root_ca_cert)))
     {
-        printf("Failed on nx_azure_iot_pnp_client_initialize!: error code = 0x%08x\r\n", status);
+        printf("Failed on nx_azure_iot_hub_client_initialize!: error code = 0x%08x\r\n", status);
         return(status);
     }
+
+    /* Set the model id.  */
+    if ((status = nx_azure_iot_hub_client_model_id_set(iothub_client_ptr,
+                                                       (const UCHAR *)SAMPLE_PNP_MODEL_ID,
+                                                       sizeof(SAMPLE_PNP_MODEL_ID) - 1)))
+    {
+        printf("Failed on nx_azure_iot_hub_client_model_id_set!: error code = 0x%08x\r\n", status);
+    }
     
+    /* Add more CA certificates.  */
+    else if ((status = nx_azure_iot_hub_client_trusted_cert_add(iothub_client_ptr, &root_ca_cert_2)))
+    {
+        printf("Failed on nx_azure_iot_hub_client_trusted_cert_add!: error code = 0x%08x\r\n", status);
+    }
+    else if ((status = nx_azure_iot_hub_client_trusted_cert_add(iothub_client_ptr, &root_ca_cert_3)))
+    {
+        printf("Failed on nx_azure_iot_hub_client_trusted_cert_add!: error code = 0x%08x\r\n", status);
+    }
+
 #if (USE_DEVICE_CERTIFICATE == 1)
 
     /* Initialize the device certificate.  */
-    if ((status = nx_secure_x509_certificate_initialize(&device_certificate,
-                                                        (UCHAR *)sample_device_cert_ptr, (USHORT)sample_device_cert_len,
-                                                        NX_NULL, 0,
-                                                        (UCHAR *)sample_device_private_key_ptr, (USHORT)sample_device_private_key_len,
-                                                        DEVICE_KEY_TYPE)))
+    else if ((status = nx_secure_x509_certificate_initialize(&device_certificate,
+                                                             (UCHAR *)sample_device_cert_ptr, (USHORT)sample_device_cert_len,
+                                                             NX_NULL, 0,
+                                                             (UCHAR *)sample_device_private_key_ptr, (USHORT)sample_device_private_key_len,
+                                                             DEVICE_KEY_TYPE)))
     {
         printf("Failed on nx_secure_x509_certificate_initialize!: error code = 0x%08x\r\n", status);
     }
 
     /* Set device certificate.  */
-    else if ((status = nx_azure_iot_pnp_client_device_cert_set(pnp_client_ptr, &device_certificate)))
+    else if ((status = nx_azure_iot_hub_client_device_cert_set(iothub_client_ptr, &device_certificate)))
     {
-        printf("Failed on nx_azure_iot_pnp_client_device_cert_set!: error code = 0x%08x\r\n", status);
+        printf("Failed on nx_azure_iot_hub_client_device_cert_set!: error code = 0x%08x\r\n", status);
     }
 #else
 
     /* Set symmetric key.  */
-    if ((status = nx_azure_iot_pnp_client_symmetric_key_set(pnp_client_ptr,
-                                                            (UCHAR *)DEVICE_SYMMETRIC_KEY,
-                                                            sizeof(DEVICE_SYMMETRIC_KEY) - 1)))
+    else if ((status = nx_azure_iot_hub_client_symmetric_key_set(iothub_client_ptr,
+                                                                 (UCHAR *)DEVICE_SYMMETRIC_KEY,
+                                                                 sizeof(DEVICE_SYMMETRIC_KEY) - 1)))
     {
-        printf("Failed on nx_azure_iot_pnp_client_symmetric_key_set!\r\n");
+        printf("Failed on nx_azure_iot_hub_client_symmetric_key_set!\r\n");
     }
 #endif /* USE_DEVICE_CERTIFICATE */
 
+    /* Enable command and properties features.  */
+    else if ((status = nx_azure_iot_hub_client_command_enable(iothub_client_ptr)))
+    {
+        printf("Failed on nx_azure_iot_hub_client_command_enable!: error code = 0x%08x\r\n", status);
+    }
+    else if ((status = nx_azure_iot_hub_client_properties_enable(iothub_client_ptr)))
+    {
+        printf("Failed on nx_azure_iot_hub_client_properties_enable!: error code = 0x%08x\r\n", status);
+    }
+
     /* Set connection status callback.  */
-    else if ((status = nx_azure_iot_pnp_client_connection_status_callback_set(pnp_client_ptr,
+    else if ((status = nx_azure_iot_hub_client_connection_status_callback_set(iothub_client_ptr,
                                                                               connection_status_callback)))
     {
         printf("Failed on connection_status_callback!\r\n");
     }
-    else if ((status = nx_azure_iot_pnp_client_receive_callback_set(pnp_client_ptr,
-                                                                    NX_AZURE_IOT_PNP_PROPERTIES,
+    else if ((status = nx_azure_iot_hub_client_receive_callback_set(iothub_client_ptr,
+                                                                    NX_AZURE_IOT_HUB_PROPERTIES,
                                                                     message_receive_callback_properties,
-                                                                    (VOID *)pnp_client_ptr)))
+                                                                    NX_NULL)))
     {
         printf("device properties callback set!: error code = 0x%08x\r\n", status);
     }
-    else if ((status = nx_azure_iot_pnp_client_receive_callback_set(pnp_client_ptr,
-                                                                    NX_AZURE_IOT_PNP_DESIRED_PROPERTIES,
-                                                                    message_receive_callback_desire_property,
-                                                                    (VOID *)pnp_client_ptr)))
+    else if ((status = nx_azure_iot_hub_client_receive_callback_set(iothub_client_ptr,
+                                                                    NX_AZURE_IOT_HUB_WRITABLE_PROPERTIES,
+                                                                    message_receive_callback_writable_properties,
+                                                                    NX_NULL)))
     {
-        printf("device desired property callback set!: error code = 0x%08x\r\n", status);
+        printf("device writable properties callback set!: error code = 0x%08x\r\n", status);
     }
 
     if (status)
     {
-        nx_azure_iot_pnp_client_deinitialize(pnp_client_ptr);
+        nx_azure_iot_hub_client_deinitialize(iothub_client_ptr);
     }
 
     return(status);
 }
 
-static void sample_device_properties_get_action(NX_AZURE_IOT_PNP_CLIENT *pnp_client_ptr)
+#ifdef ENABLE_DPS_SAMPLE
+static UINT sample_dps_entry(NX_AZURE_IOT_PROVISIONING_CLIENT *prov_client_ptr,
+                             UCHAR **iothub_hostname, UINT *iothub_hostname_length,
+                             UCHAR **iothub_device_id, UINT *iothub_device_id_length)
 {
-UINT status = 0;
-NX_AZURE_IOT_JSON_READER json_reader;
-ULONG desired_properties_version;
+UINT status;
 
-    /* Receive full properties.  */
-    if ((status = nx_azure_iot_pnp_client_properties_receive(pnp_client_ptr,
-                                                             &json_reader,
-                                                             &desired_properties_version,
-                                                             NX_NO_WAIT)))
+    printf("Start Provisioning Client...\r\n");
+
+    /* Initialize IoT provisioning client.  */
+    if ((status = nx_azure_iot_provisioning_client_initialize(prov_client_ptr, &nx_azure_iot,
+                                                              (UCHAR *)ENDPOINT, sizeof(ENDPOINT) - 1,
+                                                              (UCHAR *)ID_SCOPE, sizeof(ID_SCOPE) - 1,
+                                                              (UCHAR *)REGISTRATION_ID, sizeof(REGISTRATION_ID) - 1,
+                                                              _nx_azure_iot_tls_supported_crypto,
+                                                              _nx_azure_iot_tls_supported_crypto_size,
+                                                              _nx_azure_iot_tls_ciphersuite_map,
+                                                              _nx_azure_iot_tls_ciphersuite_map_size,
+                                                              nx_azure_iot_tls_metadata_buffer,
+                                                              sizeof(nx_azure_iot_tls_metadata_buffer),
+                                                              &root_ca_cert)))
     {
-        printf("Get all properties receive failed!: error code = 0x%08x\r\n", status);
-        return;
+        printf("Failed on nx_azure_iot_provisioning_client_initialize!: error code = 0x%08x\r\n", status);
+        return(status);
     }
 
-    /* Call nx_azure_iot_pnp_client_desired_component_property_value_next to process properties.  */
+    /* Initialize length of hostname and device ID.  */
+    *iothub_hostname_length = sizeof(sample_iothub_hostname);
+    *iothub_device_id_length = sizeof(sample_iothub_device_id);
 
-    nx_azure_iot_json_reader_deinit(&json_reader);
+    /* Add more CA certificates.  */
+    if ((status = nx_azure_iot_provisioning_client_trusted_cert_add(prov_client_ptr, &root_ca_cert_2)))
+    {
+        printf("Failed on nx_azure_iot_provisioning_client_trusted_cert_add!: error code = 0x%08x\r\n", status);
+    }
+    else if ((status = nx_azure_iot_provisioning_client_trusted_cert_add(prov_client_ptr, &root_ca_cert_3)))
+    {
+        printf("Failed on nx_azure_iot_provisioning_client_trusted_cert_add!: error code = 0x%08x\r\n", status);
+    }
+
+#if (USE_DEVICE_CERTIFICATE == 1)
+
+    /* Initialize the device certificate.  */
+    else if ((status = nx_secure_x509_certificate_initialize(&device_certificate, (UCHAR *)sample_device_cert_ptr, (USHORT)sample_device_cert_len, NX_NULL, 0,
+                                                             (UCHAR *)sample_device_private_key_ptr, (USHORT)sample_device_private_key_len, DEVICE_KEY_TYPE)))
+    {
+        printf("Failed on nx_secure_x509_certificate_initialize!: error code = 0x%08x\r\n", status);
+    }
+
+    /* Set device certificate.  */
+    else if ((status = nx_azure_iot_provisioning_client_device_cert_set(prov_client_ptr, &device_certificate)))
+    {
+        printf("Failed on nx_azure_iot_provisioning_client_device_cert_set!: error code = 0x%08x\r\n", status);
+    }
+#else
+
+    /* Set symmetric key.  */
+    else if ((status = nx_azure_iot_provisioning_client_symmetric_key_set(prov_client_ptr, (UCHAR *)DEVICE_SYMMETRIC_KEY,
+                                                                          sizeof(DEVICE_SYMMETRIC_KEY) - 1)))
+    {
+        printf("Failed on nx_azure_iot_hub_client_symmetric_key_set!: error code = 0x%08x\r\n", status);
+    }
+#endif /* USE_DEVICE_CERTIFICATE */
+    else if ((status = nx_azure_iot_provisioning_client_registration_payload_set(prov_client_ptr, (UCHAR *)SAMPLE_PNP_DPS_PAYLOAD,
+                                                                                 sizeof(SAMPLE_PNP_DPS_PAYLOAD) - 1)))
+    {
+        printf("Failed on nx_azure_iot_provisioning_client_registration_payload_set!: error code = 0x%08x\r\n", status);
+    }
+    /* Register device.  */
+    else if ((status = nx_azure_iot_provisioning_client_register(prov_client_ptr, NX_WAIT_FOREVER)))
+    {
+        printf("Failed on nx_azure_iot_provisioning_client_register!: error code = 0x%08x\r\n", status);
+    }
+
+    /* Get Device info.  */
+    else if ((status = nx_azure_iot_provisioning_client_iothub_device_info_get(prov_client_ptr,
+                                                                               sample_iothub_hostname, iothub_hostname_length,
+                                                                               sample_iothub_device_id, iothub_device_id_length)))
+    {
+        printf("Failed on nx_azure_iot_provisioning_client_iothub_device_info_get!: error code = 0x%08x\r\n", status);
+    }
+    else
+    {
+        *iothub_hostname = sample_iothub_hostname;
+        *iothub_device_id = sample_iothub_device_id;
+        printf("Registered Device Successfully.\r\n");
+    }
+
+    /* Destroy Provisioning Client.  */
+    nx_azure_iot_provisioning_client_deinitialize(prov_client_ptr);
+
+    return(status);
+}
+#endif /* ENABLE_DPS_SAMPLE */
+
+static VOID sample_connected_action(NX_AZURE_IOT_HUB_CLIENT *hub_client_ptr)
+{
+UINT status;
+
+    if (adu_agent_started == NX_FALSE)
+    {
+
+        /* Start ADU agent.  */
+        if (nx_azure_iot_adu_agent_start(&adu_agent, hub_client_ptr,
+                                         (const UCHAR *)SAMPLE_DEVICE_MANUFACTURER, sizeof(SAMPLE_DEVICE_MANUFACTURER) - 1,
+                                         (const UCHAR *)SAMPLE_DEVICE_MODEL, sizeof(SAMPLE_DEVICE_MODEL) - 1,
+                                         (const UCHAR *)SAMPLE_UPDATE_ID_PROVIDER, sizeof(SAMPLE_UPDATE_ID_PROVIDER) - 1,
+                                         (const UCHAR *)SAMPLE_UPDATE_ID_NAME, sizeof(SAMPLE_UPDATE_ID_NAME) - 1,
+                                         (const UCHAR *)SAMPLE_UPDATE_ID_VERSION, sizeof(SAMPLE_UPDATE_ID_VERSION) - 1,
+                                         adu_agent_update_notify,
+                                         nx_azure_iot_adu_agent_simulator_driver))
+        {
+            printf("Failed on nx_azure_iot_adu_agent_start!\r\n");
+            return;
+        }
+
+#if (NX_AZURE_IOT_ADU_AGENT_PROXY_UPDATE_COUNT >= 1)
+        /* Enable proxy update for leaf device.  */
+        if (nx_azure_iot_adu_agent_proxy_update_add(&adu_agent,
+                                                    (const UCHAR *)SAMPLE_LEAF_DEVICE_PROVIDER, sizeof(SAMPLE_LEAF_DEVICE_PROVIDER) - 1,
+                                                    (const UCHAR *)SAMPLE_LEAF_DEVICE_NAME, sizeof(SAMPLE_LEAF_DEVICE_NAME) - 1,
+                                                    NX_NULL, 0,
+                                                    nx_azure_iot_adu_agent_proxy_simulator_driver))
+        {
+            printf("Failed on nx_azure_iot_adu_agent_proxy_update_add!\r\n");
+            return;
+        }
+#endif /* NX_AZURE_IOT_ADU_AGENT_PROXY_UPDATE_COUNT */
+
+        printf("Device Properties: manufacturer: %s, model: %s\r\n", SAMPLE_DEVICE_MANUFACTURER, SAMPLE_DEVICE_MODEL);
+        printf("Installed Update ID: provider: %s, name: %s, version: %s\r\n", SAMPLE_UPDATE_ID_PROVIDER, SAMPLE_UPDATE_ID_NAME, SAMPLE_UPDATE_ID_VERSION);
+
+        adu_agent_started = NX_TRUE;
+    }
+
+    /* Request all properties.  */
+    if ((status = nx_azure_iot_hub_client_properties_request(hub_client_ptr, NX_WAIT_FOREVER)))
+    {
+        printf("Properties request failed!: error code = 0x%08x\r\n", status);
+    }
+    else
+    {
+        printf("Sent properties request.\r\n");
+    }
 }
 
-static void sample_device_desired_property_action(NX_AZURE_IOT_PNP_CLIENT *pnp_client_ptr)
+static VOID sample_periodic_timer_entry(ULONG context)
 {
-UINT status = 0;
-NX_AZURE_IOT_JSON_READER json_reader;
-ULONG properties_version;
 
-    /* Receive desired properties.  */
-    if ((status = nx_azure_iot_pnp_client_desired_properties_receive(pnp_client_ptr,
-                                                                     &json_reader,
-                                                                     &properties_version,
-                                                                     NX_NO_WAIT)))
+    NX_PARAMETER_NOT_USED(context);
+    tx_event_flags_set(&(sample_events), SAMPLE_PERIODIC_EVENT, TX_OR);
+}
+
+static VOID sample_periodic_action(NX_AZURE_IOT_HUB_CLIENT *hub_client_ptr)
+{
+    NX_PARAMETER_NOT_USED(hub_client_ptr);
+    
+    if ((sample_periodic_counter % 5) == 0)
     {
-        printf("Receive desired property receive failed!: error code = 0x%08x\r\n", status);
-        return;
+
+        /* Set telemetry send event and reported properties send event.  */
+        tx_event_flags_set(&(sample_events), (SAMPLE_TELEMETRY_SEND_EVENT | SAMPLE_REPORTED_PROPERTIES_SEND_EVENT), TX_OR);
     }
 
-    /* Call nx_azure_iot_pnp_client_desired_component_property_value_next to process properties.  */
-
-    nx_azure_iot_json_reader_deinit(&json_reader);
+    sample_periodic_counter++;
 }
 
 static void log_callback(az_log_classification classification, UCHAR *msg, UINT msg_len)
@@ -217,47 +575,13 @@ static void log_callback(az_log_classification classification, UCHAR *msg, UINT 
     }
 }
 
-static void adu_agent_state_change(NX_AZURE_IOT_ADU_AGENT *adu_agent_ptr, UINT state)
-{
-
-    /* Check state.  */
-    switch (state)
-    {
-    case NX_AZURE_IOT_ADU_AGENT_STATE_IDLE:
-        printf("ADU AGENT STATE: IDLE\r\n");
-        break;
-    case NX_AZURE_IOT_ADU_AGENT_STATE_DOWNLOAD_STARTED:
-        printf("ADU AGENT STATE: DOWNLOAD STARTED\r\n");
-        break;
-    case NX_AZURE_IOT_ADU_AGENT_STATE_DOWNLOAD_SUCCEEDED:
-        printf("ADU AGENT STATE: DOWNLOAD SUCCEEDED\r\n");
-        break;
-    case NX_AZURE_IOT_ADU_AGENT_STATE_INSTALL_STARTED:
-        printf("ADU AGENT STATE: INSTALL STARTED\r\n");
-        break;
-    case NX_AZURE_IOT_ADU_AGENT_STATE_INSTALL_SUCCEEDED:
-        printf("ADU AGENT STATE: INSTALL SUCCEEDED\r\n");
-        break;
-    case NX_AZURE_IOT_ADU_AGENT_STATE_APPLY_STARTED:
-        printf("ADU AGENT STATE: APPLY STARTED\r\n");
-
-        /* Apply update immediately for testing.  */
-        nx_azure_iot_adu_agent_update_apply(adu_agent_ptr);
-        break;
-    default:
-        break;
-    }
-}
-
 void sample_entry(NX_IP *ip_ptr, NX_PACKET_POOL *pool_ptr, NX_DNS *dns_ptr, UINT (*unix_time_callback)(ULONG *unix_time))
 {
 UINT status = 0;
-ULONG app_events;
 UINT loop = NX_TRUE;
+ULONG app_events;
 
     nx_azure_iot_log_init(log_callback);
-
-    tx_event_flags_create(&sample_events, (CHAR*)"sample_app");
 
     /* Create Azure IoT handler.  */
     if ((status = nx_azure_iot_create(&nx_azure_iot, (UCHAR *)"Azure IoT", ip_ptr, pool_ptr, dns_ptr,
@@ -268,7 +592,7 @@ UINT loop = NX_TRUE;
         return;
     }
 
-    /* Initialize CA certificate.  */
+    /* Initialize CA certificates.  */
     if ((status = nx_secure_x509_certificate_initialize(&root_ca_cert, (UCHAR *)_nx_azure_iot_root_cert,
                                                         (USHORT)_nx_azure_iot_root_cert_size,
                                                         NX_NULL, 0, NULL, 0, NX_SECURE_X509_KEY_TYPE_NONE)))
@@ -278,66 +602,66 @@ UINT loop = NX_TRUE;
         return;
     }
 
-    /* Initialize.  */
-    if ((status = sample_initialize_iothub(&pnp_client)))
+    if ((status = nx_secure_x509_certificate_initialize(&root_ca_cert_2, (UCHAR *)_nx_azure_iot_root_cert_2,
+                                                        (USHORT)_nx_azure_iot_root_cert_size_2,
+                                                        NX_NULL, 0, NULL, 0, NX_SECURE_X509_KEY_TYPE_NONE)))
     {
-        printf("Failed to initialize pnp client: error code = 0x%08x\r\n", status);
+        printf("Failed to initialize ROOT CA certificate!: error code = 0x%08x\r\n", status);
         nx_azure_iot_delete(&nx_azure_iot);
         return;
     }
 
-    /* Start PnP connection.  */
-    if (nx_azure_iot_pnp_client_connect(&pnp_client, NX_TRUE, NX_WAIT_FOREVER))
+    if ((status = nx_secure_x509_certificate_initialize(&root_ca_cert_3, (UCHAR *)_nx_azure_iot_root_cert_3,
+                                                        (USHORT)_nx_azure_iot_root_cert_size_3,
+                                                        NX_NULL, 0, NULL, 0, NX_SECURE_X509_KEY_TYPE_NONE)))
     {
-        printf("Failed on nx_azure_iot_pnp_client_connect!\r\n");
-        nx_azure_iot_pnp_client_deinitialize(&pnp_client);
+        printf("Failed to initialize ROOT CA certificate!: error code = 0x%08x\r\n", status);
         nx_azure_iot_delete(&nx_azure_iot);
         return;
     }
 
-    /* Start ADU agent.  */
-    if (nx_azure_iot_adu_agent_start(&adu_agent, &pnp_client,
-                                     (const UCHAR *)SAMPLE_DEVICE_MANUFACTURER, sizeof(SAMPLE_DEVICE_MANUFACTURER) - 1,
-                                     (const UCHAR *)SAMPLE_DEVICE_MODEL, sizeof(SAMPLE_DEVICE_MODEL) - 1,
-                                     (const UCHAR *)SAMPLE_UPDATE_ID_PROVIDER, sizeof(SAMPLE_UPDATE_ID_PROVIDER) - 1,
-                                     (const UCHAR *)SAMPLE_UPDATE_ID_NAME, sizeof(SAMPLE_UPDATE_ID_NAME) - 1,
-                                     (const UCHAR *)SAMPLE_UPDATE_ID_VERSION, sizeof(SAMPLE_UPDATE_ID_VERSION) - 1,
-                                     adu_agent_state_change,
-                                     nx_azure_iot_adu_agent_simulator_driver))
-    {
-        printf("Failed on nx_azure_iot_adu_agent_start!\r\n");
-        nx_azure_iot_pnp_client_deinitialize(&pnp_client);
-        nx_azure_iot_delete(&nx_azure_iot);
-        return;
-    }
+    tx_timer_create(&(sample_timer), (CHAR*)"sample_app_timer", sample_periodic_timer_entry, 0,
+                    NX_IP_PERIODIC_RATE, NX_IP_PERIODIC_RATE, TX_AUTO_ACTIVATE);
+    tx_event_flags_create(&sample_events, (CHAR*)"sample_app_event");
 
-    printf("Device Properties: manufacturer: %s, model: %s\r\n", SAMPLE_DEVICE_MANUFACTURER, SAMPLE_DEVICE_MODEL);
-    printf("Installed Update ID: provider: %s, name: %s, version: %s\r\n", SAMPLE_UPDATE_ID_PROVIDER, SAMPLE_UPDATE_ID_NAME, SAMPLE_UPDATE_ID_VERSION);
-    printf("\r\n");
-
-    /* Request full properties.  */
-    nx_azure_iot_pnp_client_properties_request(&pnp_client, NX_WAIT_FOREVER);
-
-    /* Loop to process events.  */
     while (loop)
     {
 
-        /* Pickup event flags.  */
-        tx_event_flags_get(&sample_events, SAMPLE_ALL_EVENTS, TX_OR_CLEAR, &app_events, NX_WAIT_FOREVER);
+        /* Pickup sample event flags.  */
+        tx_event_flags_get(&(sample_events), SAMPLE_ALL_EVENTS, TX_OR_CLEAR, &app_events, NX_WAIT_FOREVER);
 
-        if (app_events & SAMPLE_DEVICE_PROPERTIES_GET_EVENT)
+        if (app_events & SAMPLE_CONNECTED_EVENT)
         {
-            sample_device_properties_get_action(&pnp_client);
+            sample_connected_action(&iothub_client);
         }
 
-        if (app_events & SAMPLE_DEVICE_DESIRED_PROPERTIES_EVENT)
+        if (app_events & SAMPLE_PERIODIC_EVENT)
         {
-            sample_device_desired_property_action(&pnp_client);
+            sample_periodic_action(&iothub_client);
         }
+
+        if (app_events & SAMPLE_TELEMETRY_SEND_EVENT)
+        {
+            sample_telemetry_action(&iothub_client);
+        }
+
+        if (app_events & SAMPLE_PROPERTIES_RECEIVE_EVENT)
+        {
+            sample_properties_receive_action(&iothub_client);
+        }
+
+        if (app_events & SAMPLE_WRITABLE_PROPERTIES_RECEIVE_EVENT)
+        {
+            sample_writable_properties_receive_action(&iothub_client);
+        }
+
+        /* Connection monitor.  */
+        sample_connection_monitor(ip_ptr, &iothub_client, sample_connection_status, sample_initialize_iothub);
     }
 
-    nx_azure_iot_pnp_client_disconnect(&pnp_client);
-    nx_azure_iot_pnp_client_deinitialize(&pnp_client);
+    /* Cleanup.  */
+    tx_event_flags_delete(&sample_events);
+    tx_timer_delete(&sample_timer);
+    nx_azure_iot_hub_client_deinitialize(&iothub_client);
     nx_azure_iot_delete(&nx_azure_iot);
 }
-

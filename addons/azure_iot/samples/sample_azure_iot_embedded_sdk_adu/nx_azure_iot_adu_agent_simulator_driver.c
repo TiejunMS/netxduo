@@ -23,23 +23,25 @@ void nx_azure_iot_adu_agent_simulator_driver(NX_AZURE_IOT_ADU_AGENT_DRIVER *driv
     /* Process according to the driver request type.  */
     switch (driver_req_ptr -> nx_azure_iot_adu_agent_driver_command)
     {
-        
+
         case NX_AZURE_IOT_ADU_AGENT_DRIVER_INITIALIZE:
         {
-           
+
             /* Process initialize requests.  */
+            printf("Driver initialized successfully.\r\n");
             break;
         }
-            
+
         case NX_AZURE_IOT_ADU_AGENT_DRIVER_PREPROCESS:
         {
         
             /* Process firmware preprocess requests before writing firmware.
                Such as: erase the flash at once to improve the speed.  */
+            printf("Driver falsh erased successfully.\r\n");
     
             break;
         }
-            
+
         case NX_AZURE_IOT_ADU_AGENT_DRIVER_WRITE:
         {
         
@@ -50,28 +52,31 @@ void nx_azure_iot_adu_agent_simulator_driver(NX_AZURE_IOT_ADU_AGENT_DRIVER *driv
                2. Write firmware contents into new bank.
                3. Decrypt and authenticate the firmware itself if needed.
             */
+            printf("Driver firmware writing...\r\n");
             
             break;
-        } 
-            
+        }
+
         case NX_AZURE_IOT_ADU_AGENT_DRIVER_INSTALL:
         {
 
             /* Set the new firmware for next boot.  */
+            printf("Driver firmware installed successfully.\r\n");
 
             break;
-        } 
-            
+        }
+
         case NX_AZURE_IOT_ADU_AGENT_DRIVER_APPLY:
         {
 
             /* Apply the new firmware, and reboot device from that.*/
+            printf("Driver firmware apply successfully.\r\n");
         
             break;
-        } 
+        }
         default:
         {
-                
+
             /* Invalid driver request.  */
 
             /* Default to successful return.  */
