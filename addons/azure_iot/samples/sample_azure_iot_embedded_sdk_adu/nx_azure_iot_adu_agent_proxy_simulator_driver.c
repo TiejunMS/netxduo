@@ -11,10 +11,10 @@
 
 #include "nx_azure_iot_adu_agent.h"
 
-void nx_azure_iot_adu_agent_proxy_simulator_driver(NX_AZURE_IOT_ADU_AGENT_DRIVER *driver_req_ptr);
+void nx_azure_iot_adu_agent_proxy_driver(NX_AZURE_IOT_ADU_AGENT_DRIVER *driver_req_ptr);
 
 /****** DRIVER SPECIFIC ******/
-void nx_azure_iot_adu_agent_proxy_simulator_driver(NX_AZURE_IOT_ADU_AGENT_DRIVER *driver_req_ptr)
+void nx_azure_iot_adu_agent_proxy_driver(NX_AZURE_IOT_ADU_AGENT_DRIVER *driver_req_ptr)
 {
 
     /* Default to successful return.  */
@@ -48,7 +48,7 @@ void nx_azure_iot_adu_agent_proxy_simulator_driver(NX_AZURE_IOT_ADU_AGENT_DRIVER
         
             /* Process firmware preprocess requests before writing firmware.
                Such as: erase the flash at once to improve the speed.  */
-            printf("Proxy driver falsh erased successfully.\r\n");
+            printf("Proxy driver flash erased successfully.\r\n");
     
             break;
         }

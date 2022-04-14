@@ -134,17 +134,17 @@ Threads
 
 <div style="page-break-after: always;"></div>
 
-**nx_azure_iot_adu_agent_update_apply**
+**nx_azure_iot_adu_agent_update_download_install**
 ***
-<div style="text-align: right"> Start to download, install and apply the new update. </div>
+<div style="text-align: right"> Start to download and install the new update. </div>
 
 **Prototype**
 ```c
-UINT nx_azure_iot_adu_agent_update_start(NX_AZURE_IOT_ADU_AGENT *adu_agent_ptr);
+UINT nx_azure_iot_adu_agent_update_download_install(NX_AZURE_IOT_ADU_AGENT *adu_agent_ptr);
 ```
 **Description**
 
-<p>The routine starts to download, install and apply the new update. The device may reboot after applying the update successfully.</p>
+<p>The routine starts to download and install the new update.</p>
 
 **Parameters**
 |               |               |
@@ -153,8 +153,40 @@ UINT nx_azure_iot_adu_agent_update_start(NX_AZURE_IOT_ADU_AGENT *adu_agent_ptr);
 
 
 **Return Values**
+* NX_AZURE_IOT_SUCCESS Successfully started to download and install the new update.
+* NX_AZURE_IOT_INVALID_PARAMETER Fail to download and install the new update due to invalid parameter.
+
+**Allowed From**
+
+Threads
+
+**Example**
+
+**See Also**
+
+<div style="page-break-after: always;"></div>
+
+**nx_azure_iot_adu_agent_update_apply**
+***
+<div style="text-align: right"> Start to apply the new update. </div>
+
+**Prototype**
+```c
+UINT nx_azure_iot_adu_agent_update_apply(NX_AZURE_IOT_ADU_AGENT *adu_agent_ptr);
+```
+**Description**
+
+<p>The routine starts to apply the new update. The device may reboot after applying the update successfully.</p>
+
+**Parameters**
+|               |               |
+| - |:-|
+| adu_agent_ptr [in]    | A pointer to a `NX_AZURE_IOT_ADU_AGENT` |
+
+
+**Return Values**
+* NX_AZURE_IOT_SUCCESS Successfully started to apply the new update.
 * NX_AZURE_IOT_INVALID_PARAMETER Fail to apply the new update due to invalid parameter.
-* NX_AZURE_IOT_FAILURE Fail to apply the new update due to driver error.
 
 **Allowed From**
 

@@ -108,6 +108,7 @@ extern   "C" {
 #define NX_AZURE_IOT_ADU_AGENT_DNS_RESPONSE_RECEIVE_EVENT               ((ULONG)0x00000002)
 #define NX_AZURE_IOT_ADU_AGENT_HTTP_CONNECT_DONE_EVENT                  ((ULONG)0x00000004)
 #define NX_AZURE_IOT_ADU_AGENT_HTTP_RECEIVE_EVENT                       ((ULONG)0x00000008)
+#define NX_AZURE_IOT_ADU_AGENT_APPLY_EVENT                              ((ULONG)0x00000010)
 
 /* Define the agent state values. Interaction between agent and server.  */
 #define NX_AZURE_IOT_ADU_AGENT_STATE_IDLE                               0
@@ -121,8 +122,13 @@ extern   "C" {
 /* Define the result code value. Interaction between agent and server.  */
 #define NX_AZURE_IOT_ADU_AGENT_RESULT_CODE_FAILURE                      0
 #define NX_AZURE_IOT_ADU_AGENT_RESULT_CODE_IDLE_SUCCESS                 200
-#define NX_AZURE_IOT_ADU_AGENT_RESULT_CODE_APLLY_SUCCESS                700
-#define NX_AZURE_IOT_ADU_AGENT_RESULT_CODE_APLLY_INPROGRESS             701
+#define NX_AZURE_IOT_ADU_AGENT_RESULT_CODE_APPLY_SUCCESS                700
+#define NX_AZURE_IOT_ADU_AGENT_RESULT_CODE_APPLY_INPROGRESS             701
+
+/* Define the agent update state for adu_agent_update_notify().  */
+#define NX_AZURE_IOT_ADU_AGENT_UPDATE_RECEIVED                          0
+#define NX_AZURE_IOT_ADU_AGENT_UPDATE_DOWNLOADED                        1
+#define NX_AZURE_IOT_ADU_AGENT_UPDATE_INSTALLED                         2
 
 /* FIXME: status codes should be defined in iothub client.  */
 /* Status codes, closely mapping to HTTP status. */
@@ -415,6 +421,9 @@ typedef struct NX_AZURE_IOT_ADU_AGENT_STEP_STRUCT
     /* Result.  */
     NX_AZURE_IOT_ADU_AGENT_RESULT           result;
 
+    /* Driver entry point for firmware.  */
+    VOID                                  (*driver_entry)(NX_AZURE_IOT_ADU_AGENT_DRIVER *);
+
 } NX_AZURE_IOT_ADU_AGENT_STEP;
 
 /**
@@ -531,7 +540,7 @@ typedef struct NX_AZURE_IOT_ADU_AGENT_DOWNLOADER_STRUCT
     UCHAR                                  *host;
     UINT                                    host_length;
 
-    /* Resoruce string.  */
+    /* Resource string.  */
     UCHAR                                  *resource;
     UINT                                    resource_length;
 
@@ -662,6 +671,7 @@ typedef struct NX_AZURE_IOT_ADU_AGENT_STRUCT
     /* Define the callback function for new update notification. If specified
        by the application, this function is called when new update occurs.  */
     VOID                                  (*nx_azure_iot_adu_agent_update_notify)(struct NX_AZURE_IOT_ADU_AGENT_STRUCT *adu_agent_ptr,
+                                                                                  UINT update_state,
                                                                                   UCHAR *provider, UINT provider_length,
                                                                                   UCHAR *name, UINT name_length,
                                                                                   UCHAR *version, UINT version_length);
@@ -699,6 +709,7 @@ UINT nx_azure_iot_adu_agent_start(NX_AZURE_IOT_ADU_AGENT *adu_agent_ptr,
                                   const UCHAR *name, UINT name_length,
                                   const UCHAR *version, UINT version_length,
                                   VOID (*adu_agent_update_notify)(NX_AZURE_IOT_ADU_AGENT *adu_agent_ptr,
+                                                                  UINT update_state,
                                                                   UCHAR *provider, UINT provider_length,
                                                                   UCHAR *name, UINT name_length,
                                                                   UCHAR *version, UINT version_length),
@@ -739,15 +750,26 @@ UINT nx_azure_iot_adu_agent_proxy_update_add(NX_AZURE_IOT_ADU_AGENT *adu_agent_p
 UINT nx_azure_iot_adu_agent_stop(NX_AZURE_IOT_ADU_AGENT *adu_agent_ptr);
 
 /**
- * @brief Start to update firmware immediately.
- * @note Agent will download, install and apply new firmware, may reboot the device.
+ * @brief Start to download and install firmware immediately.
+ * @note Agent will download and install new firmware.
  *
  * @param[in] adu_agent_ptr A pointer to a #NX_AZURE_IOT_ADU_AGENT.
  * @return A `UINT` with the result of the API.
  *   @retval #NX_AZURE_IOT_SUCCESS Successfully start to update new firmware.
  *   @retval #NX_AZURE_IOT_INVALID_PARAMETER Fail to start to update new firmware due to invalid parameter.
  */
-UINT nx_azure_iot_adu_agent_update_start(NX_AZURE_IOT_ADU_AGENT *adu_agent_ptr);
+UINT nx_azure_iot_adu_agent_update_download_install(NX_AZURE_IOT_ADU_AGENT *adu_agent_ptr);
+
+/**
+ * @brief Start to apply firmware immediately.
+ * @note Agent will apply new firmware, may reboot the device.
+ *
+ * @param[in] adu_agent_ptr A pointer to a #NX_AZURE_IOT_ADU_AGENT.
+ * @return A `UINT` with the result of the API.
+ *   @retval #NX_AZURE_IOT_SUCCESS Successfully start to apply new firmware.
+ *   @retval #NX_AZURE_IOT_INVALID_PARAMETER Fail to start to apply new firmware due to invalid parameter.
+ */
+UINT nx_azure_iot_adu_agent_update_apply(NX_AZURE_IOT_ADU_AGENT *adu_agent_ptr);
 
 #ifdef __cplusplus
 }

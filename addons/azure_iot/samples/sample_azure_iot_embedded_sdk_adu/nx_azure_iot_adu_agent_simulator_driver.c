@@ -11,10 +11,10 @@
 
 #include "nx_azure_iot_adu_agent.h"
 
-void nx_azure_iot_adu_agent_simulator_driver(NX_AZURE_IOT_ADU_AGENT_DRIVER *driver_req_ptr);
+void nx_azure_iot_adu_agent_driver(NX_AZURE_IOT_ADU_AGENT_DRIVER *driver_req_ptr);
 
 /****** DRIVER SPECIFIC ******/
-void nx_azure_iot_adu_agent_simulator_driver(NX_AZURE_IOT_ADU_AGENT_DRIVER *driver_req_ptr)
+void nx_azure_iot_adu_agent_driver(NX_AZURE_IOT_ADU_AGENT_DRIVER *driver_req_ptr)
 {
 
     /* Default to successful return.  */
@@ -37,7 +37,7 @@ void nx_azure_iot_adu_agent_simulator_driver(NX_AZURE_IOT_ADU_AGENT_DRIVER *driv
         
             /* Process firmware preprocess requests before writing firmware.
                Such as: erase the flash at once to improve the speed.  */
-            printf("Driver falsh erased successfully.\r\n");
+            printf("Driver flash erased successfully.\r\n");
     
             break;
         }
@@ -48,7 +48,7 @@ void nx_azure_iot_adu_agent_simulator_driver(NX_AZURE_IOT_ADU_AGENT_DRIVER *driv
             /* Process firmware write requests.  */
             
             /* Write firmware contents.
-               1. This function must support figure out which bank it should write to.
+               1. This function must be able to figure out which bank it should write to.
                2. Write firmware contents into new bank.
                3. Decrypt and authenticate the firmware itself if needed.
             */

@@ -1172,7 +1172,7 @@ UCHAR packet_id[2];
     topic_len = packet_ptr -> nx_packet_length;
 
     status = nx_azure_iot_mqtt_packet_id_get(&(hub_client_ptr -> nx_azure_iot_hub_client_resource.resource_mqtt),
-                                             packet_id, wait_option);
+                                             packet_id);
     if (status)
     {
         LogError(LogLiteralArgs("Failed to get packet id"));

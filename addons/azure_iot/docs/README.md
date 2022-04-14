@@ -18,16 +18,16 @@ Azure IoT Middleware for Azure RTOS stays as an addon for the Azure RTOS NetXDuo
 
 ### Build
 
-The Azure IoT Middleware for Azure RTOS is built as part of the NetXDuo. Make sure you have defined the following *marcos* when building it:
+The Azure IoT Middleware for Azure RTOS is built as part of the NetXDuo. Make sure you have defined the following *macros* when building it:
 
-Module | Marcos |
+Module | Macros |
 | --- | --- |
 | Azure IoT Middleware for Azure RTOS | `NX_ENABLE_EXTENDED_NOTIFY_SUPPORT`<br> `NX_SECURE_ENABLE`<br> `NXD_MQTT_CLOUD_ENABLE`
 | Azure Defender for IoT security module | `NX_ENABLE_IP_PACKET_FILTER`
 
 **NOTE:** Azure Defender for IoT security module is enabled by default. You can define `NX_AZURE_DISABLE_IOT_SECURITY_MODULE` to disable it. [Learn more](#azure-defender-for-iot-security-module).
 
-Follow [this example](/ports/cortex_m7/iar/inc/nx_port.h) to see how to define these *marcos* in the header file.
+Follow [this example](/ports/cortex_m7/iar/inc/nx_port.h) to see how to define these *macros* in the header file.
 
 ### Samples
 
@@ -67,6 +67,8 @@ See the [samples](https://github.com/azure-rtos/samples/tree/PublicPreview/ADU) 
 
 And you can learn more details about the [Device Update for IoT Hub service](https://docs.microsoft.com/azure/iot-hub-device-update/understand-device-update).
 
+For a tutorial on how to get your Azure RTOS ADU sample up and running, [please see the link here](https://docs.microsoft.com/azure/iot-hub-device-update/device-update-azure-real-time-operating-system).
+
 ## Azure Defender for IoT
 
 The [Azure Defender for IoT](https://docs.microsoft.com/azure/defender-for-iot/iot-security-azure-rtos) provides a comprehensive security solution for Azure RTOS devices. The middleware ships with the ASC for IoT Security Module built-in and enabled by default to detect common threats and potential malicious activities.
@@ -100,7 +102,7 @@ The extra resource it will take on device and connection:
 Toolchain | RAM | ROM |
 | --- | --- | --- |
 | IAR Embedded Workbench (iccarm) | 4Kb | 10Kb
-| GUN ARM Embedded Toolchain (arm-gcc) | 4Kb | 13Kb
+| GNU ARM Embedded Toolchain (arm-gcc) | 4Kb | 13Kb
 
 **Additional Connection**:
 Connection Type | RAM | Network |

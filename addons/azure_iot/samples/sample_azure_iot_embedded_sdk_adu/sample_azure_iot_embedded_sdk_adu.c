@@ -22,18 +22,36 @@
 
 
 /* Device properties.  */
+#ifndef SAMPLE_DEVICE_MANUFACTURER
 #define SAMPLE_DEVICE_MANUFACTURER                                      "Contoso"
+#endif /* SAMPLE_DEVICE_MANUFACTURER*/
+
+#ifndef SAMPLE_DEVICE_MODEL
 #define SAMPLE_DEVICE_MODEL                                             "IoTDevice"
+#endif /* SAMPLE_DEVICE_MODEL */
 
 /* Current update id.  */
-#define SAMPLE_UPDATE_ID_PROVIDER                                       "Contoso"
-#define SAMPLE_UPDATE_ID_NAME                                           "IoTDevice"
-#define SAMPLE_UPDATE_ID_VERSION                                        "6.1.0"
+#ifndef SAMPLE_UPDATE_ID_PROVIDER
+#define SAMPLE_UPDATE_ID_PROVIDER                                       SAMPLE_DEVICE_MANUFACTURER
+#endif /* SAMPLE_UPDATE_ID_PROVIDER */
+
+#ifndef SAMPLE_UPDATE_ID_NAME
+#define SAMPLE_UPDATE_ID_NAME                                           SAMPLE_DEVICE_MODEL
+#endif /* SAMPLE_UPDATE_ID_NAME */
+
+#ifndef SAMPLE_UPDATE_ID_VERSION
+#define SAMPLE_UPDATE_ID_VERSION                                        "1.0.0"
+#endif /* SAMPLE_UPDATE_ID_VERSION */
 
 #if (NX_AZURE_IOT_ADU_AGENT_PROXY_UPDATE_COUNT >= 1)
 /* Current update id for leaf device.  */
-#define SAMPLE_LEAF_DEVICE_PROVIDER                                     "Contoso"
-#define SAMPLE_LEAF_DEVICE_NAME                                         "IoTDevice-Leaf"
+#ifndef SAMPLE_LEAF_UPDATE_ID_PROVIDER
+#define SAMPLE_LEAF_UPDATE_ID_PROVIDER                                  SAMPLE_DEVICE_MANUFACTURER
+#endif /* SAMPLE_LEAF_UPDATE_ID_PROVIDER*/
+
+#ifndef SAMPLE_LEAF_UPDATE_ID_NAME
+#define SAMPLE_LEAF_UPDATE_ID_NAME                                      "IoTDevice-Leaf"
+#endif /* SAMPLE_LEAF_UPDATE_ID_NAME */
 #endif /* NX_AZURE_IOT_ADU_AGENT_PROXY_UPDATE_COUNT */
 
 /* Define sample wait option.  */
@@ -127,25 +145,38 @@ static UINT sample_telemetry_id = 0;
 static NX_AZURE_IOT_ADU_AGENT adu_agent;
 static UINT adu_agent_started = NX_FALSE;
 
-extern void nx_azure_iot_adu_agent_simulator_driver(NX_AZURE_IOT_ADU_AGENT_DRIVER *driver_req_ptr);
-extern void nx_azure_iot_adu_agent_proxy_simulator_driver(NX_AZURE_IOT_ADU_AGENT_DRIVER *driver_req_ptr);
+extern void nx_azure_iot_adu_agent_driver(NX_AZURE_IOT_ADU_AGENT_DRIVER *driver_req_ptr);
+#if (NX_AZURE_IOT_ADU_AGENT_PROXY_UPDATE_COUNT >= 1)
+extern void nx_azure_iot_adu_agent_proxy_driver(NX_AZURE_IOT_ADU_AGENT_DRIVER *driver_req_ptr);
+#endif /* NX_AZURE_IOT_ADU_AGENT_PROXY_UPDATE_COUNT */
 
 /* Include the connection monitor function from sample_azure_iot_embedded_sdk_connect.c.  */
 extern VOID sample_connection_monitor(NX_IP *ip_ptr, NX_AZURE_IOT_HUB_CLIENT *iothub_client_ptr, UINT connection_status,
                                       UINT (*iothub_init)(NX_AZURE_IOT_HUB_CLIENT *hub_client_ptr));
 
 static void adu_agent_update_notify(NX_AZURE_IOT_ADU_AGENT *adu_agent_ptr,
+                                    UINT update_state,
                                     UCHAR *provider, UINT provider_length,
                                     UCHAR *name, UINT name_length,
                                     UCHAR *version, UINT version_length)
 {
 
-    /* Receive new update.  */
-    printf("Receive new update: Provider: %.*s; Name: %.*s, Version: %.*s\r\n",
-           provider_length, provider, name_length, name, version_length, version);
+    if (update_state == NX_AZURE_IOT_ADU_AGENT_UPDATE_RECEIVED)
+    {
 
-    /* Start to update immediately for testing.  */
-    nx_azure_iot_adu_agent_update_start(adu_agent_ptr);
+        /* Received new update.  */
+        printf("Received new update: Provider: %.*s; Name: %.*s, Version: %.*s\r\n",
+               provider_length, provider, name_length, name, version_length, version);
+
+        /* Start to download and install update immediately for testing.  */
+        nx_azure_iot_adu_agent_update_download_install(adu_agent_ptr);
+    }
+    else if(update_state == NX_AZURE_IOT_ADU_AGENT_UPDATE_INSTALLED)
+    {
+
+        /* Start to apply update immediately for testing.  */
+        nx_azure_iot_adu_agent_update_apply(adu_agent_ptr);
+    }
 }
 
 static void sample_writable_properties_receive_action(NX_AZURE_IOT_HUB_CLIENT *hub_client_ptr)
@@ -510,7 +541,7 @@ UINT status;
                                          (const UCHAR *)SAMPLE_UPDATE_ID_NAME, sizeof(SAMPLE_UPDATE_ID_NAME) - 1,
                                          (const UCHAR *)SAMPLE_UPDATE_ID_VERSION, sizeof(SAMPLE_UPDATE_ID_VERSION) - 1,
                                          adu_agent_update_notify,
-                                         nx_azure_iot_adu_agent_simulator_driver))
+                                         nx_azure_iot_adu_agent_driver))
         {
             printf("Failed on nx_azure_iot_adu_agent_start!\r\n");
             return;
@@ -519,10 +550,10 @@ UINT status;
 #if (NX_AZURE_IOT_ADU_AGENT_PROXY_UPDATE_COUNT >= 1)
         /* Enable proxy update for leaf device.  */
         if (nx_azure_iot_adu_agent_proxy_update_add(&adu_agent,
-                                                    (const UCHAR *)SAMPLE_LEAF_DEVICE_PROVIDER, sizeof(SAMPLE_LEAF_DEVICE_PROVIDER) - 1,
-                                                    (const UCHAR *)SAMPLE_LEAF_DEVICE_NAME, sizeof(SAMPLE_LEAF_DEVICE_NAME) - 1,
+                                                    (const UCHAR *)SAMPLE_LEAF_UPDATE_ID_PROVIDER, sizeof(SAMPLE_LEAF_UPDATE_ID_PROVIDER) - 1,
+                                                    (const UCHAR *)SAMPLE_LEAF_UPDATE_ID_NAME, sizeof(SAMPLE_LEAF_UPDATE_ID_NAME) - 1,
                                                     NX_NULL, 0,
-                                                    nx_azure_iot_adu_agent_proxy_simulator_driver))
+                                                    nx_azure_iot_adu_agent_proxy_driver))
         {
             printf("Failed on nx_azure_iot_adu_agent_proxy_update_add!\r\n");
             return;
